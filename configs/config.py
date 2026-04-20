@@ -62,6 +62,11 @@ cfg.w_shape = 0.3
 cfg.w_tex = 0.04
 cfg.w_jaw = 0.05
 
+# Performance toggles (all default ON; set False to fall back to original behavior)
+cfg.opt_cache_albedos = True   # Cache FLAMETex output per pyramid level when tex is frozen
+cfg.opt_rot_transpose = True   # Use transpose instead of inverse for camera rotation (orthonormal)
+cfg.opt_log_every = 10         # TensorBoard logging interval in iters (1 = every iter, 0 = disable)
+
 
 def get_cfg_defaults():
     return cfg.clone()

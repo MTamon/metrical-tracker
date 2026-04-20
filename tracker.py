@@ -213,7 +213,7 @@ class Tracker(object):
         }
 
         vertices, _, _ = self.flame(
-            cameras=torch.inverse(self.cameras.R),
+            cameras=self._invert_cam_R(self.cameras.R),
             shape_params=self.shape,
             expression_params=self.exp,
             eye_pose_params=self.eyes,
@@ -234,7 +234,7 @@ class Tracker(object):
             rotvec = np.zeros(3)
             rotvec[0] = 12.0 * np.pi / 180.0
             jaw = matrix_to_rotation_6d(torch.from_numpy(R.from_rotvec(rotvec).as_matrix())[None, ...].cuda()).float()
-            vertices = self.flame(cameras=torch.inverse(self.cameras.R), shape_params=self.shape, jaw_pose_params=jaw)[0].detach()
+            vertices = self.flame(cameras=self._invert_cam_R(self.cameras.R), shape_params=self.shape, jaw_pose_params=jaw)[0].detach()
             faces = self.diff_renderer.faces[0].cpu().numpy()
             trimesh.Trimesh(faces=faces, vertices=vertices[0].cpu().numpy(), process=False).export(canon)
 
@@ -319,6 +319,14 @@ class Tracker(object):
             for i, name in enumerate(param['name']):
                 setattr(self, name, nn.Parameter(param['params'][i].clone().detach()))
 
+    def _invert_cam_R(self, R):
+        # For orthonormal rotation matrices, transpose equals inverse and is both
+        # faster and numerically more stable. Falls back to torch.inverse when
+        # the toggle is disabled or R is not a 3x3 rotation.
+        if getattr(self.config, 'opt_rot_transpose', True) and R.shape[-2:] == (3, 3):
+            return R.transpose(-1, -2)
+        return torch.inverse(R)
+
     def get_param(self, name, param_groups):
         for param in param_groups:
             if name in param['name']:
@@ -401,7 +409,7 @@ class Tracker(object):
                 R=rotation_6d_to_matrix(self.R), T=self.t,
                 image_size=self.image_size
             )
-            _, lmk68, lmkMP = self.flame(cameras=torch.inverse(self.cameras.R), shape_params=self.shape, expression_params=self.exp, eye_pose_params=self.eyes, jaw_pose_params=self.jaw)
+            _, lmk68, lmkMP = self.flame(cameras=self._invert_cam_R(self.cameras.R), shape_params=self.shape, expression_params=self.exp, eye_pose_params=self.eyes, jaw_pose_params=self.jaw)
             points68 = self.cameras.transform_points_screen(lmk68)[..., :2]
             pointsMP = self.cameras.transform_points_screen(lmkMP)[..., :2]
 
@@ -471,6 +479,15 @@ class Tracker(object):
 
             best_loss = np.inf
 
+            # Cache FLAMETex output when `tex` is frozen (not in the optimizer params).
+            # During tracking and secondary-keyframe init, `tex` is constant, so
+            # recomputing self.flametex(tex) every iteration is pure overhead.
+            tex_is_optimized = any('tex' in p['name'] for p in params)
+            cache_albedos_enabled = getattr(self.config, 'opt_cache_albedos', True) and not tex_is_optimized
+            cached_albedos = self.flametex(tex).detach() if cache_albedos_enabled else None
+
+            log_every = getattr(self.config, 'opt_log_every', 1)
+
             for p in range(iters):
                 if p % self.config.raster_update == 0:
                     self.diff_renderer.rasterizer.reset()
@@ -483,7 +500,7 @@ class Tracker(object):
                     image_size=(image_size,)
                 )
                 vertices, lmk68, lmkMP = self.flame(
-                    cameras=torch.inverse(self.cameras.R),
+                    cameras=self._invert_cam_R(self.cameras.R),
                     shape_params=shape,
                     expression_params=exp,
                     eye_pose_params=eyes,
@@ -519,7 +536,7 @@ class Tracker(object):
 
                 # Dense term (look at the config pyr_levels)
                 if k > 0 or self.is_initializing:
-                    albedos = self.flametex(tex)
+                    albedos = cached_albedos if cached_albedos is not None else self.flametex(tex)
                     ops = self.diff_renderer(vertices, albedos, sh, self.cameras)
 
                     # Photometric dense term
@@ -533,8 +550,9 @@ class Tracker(object):
                 all_loss.backward()
                 optimizer.step()
 
-                for key in losses.keys():
-                    self.writer.add_scalar(key, losses[key], global_step=self.global_step)
+                if log_every > 0 and (self.global_step % log_every == 0):
+                    for key in losses.keys():
+                        self.writer.add_scalar(key, losses[key], global_step=self.global_step)
 
                 self.global_step += 1
 
@@ -572,7 +590,7 @@ class Tracker(object):
             self.debug_renderer.rasterizer.raster_settings.image_size = self.get_image_size()
 
             vertices, lmk68, lmkMP = self.flame(
-                cameras=torch.inverse(self.cameras.R),
+                cameras=self._invert_cam_R(self.cameras.R),
                 shape_params=self.shape,
                 expression_params=self.exp,
                 eye_pose_params=self.eyes,
