@@ -547,7 +547,8 @@ class Tracker(object):
                     best_loss = loss_color
                     self.update(optimizer.param_groups)
 
-        for log in logs: logger.info(log)
+        for log in logs: logger.debug(log)
+        self._last_all_loss = float(losses['all_loss'] if 'all_loss' in losses else sum(losses.values()))
 
     def checkpoint(self, batch, visualizations=[[View.GROUND_TRUTH, View.LANDMARKS, View.HEATMAP], [View.COLOR_OVERLAY, View.SHAPE_OVERLAY, View.SHAPE]], frame_dst='/video', save=True, dump_directly=False):
         batch = self.to_cuda(batch)
@@ -647,12 +648,21 @@ class Tracker(object):
 
     def optimize_video(self):
         self.is_initializing = False
-        for i in list(range(self.frame, len(self.dataset))):
+        pbar = tqdm(
+            range(self.frame, len(self.dataset)),
+            initial=self.frame,
+            total=len(self.dataset),
+            desc='tracking',
+        )
+        for i in pbar:
             batch = self.to_cuda(self.dataset[i], unsqueeze=True)
             if type(batch) is torch.Tensor:
                 continue
             self.optimize_frame(batch)
             self.frame += 1
+            # 最新の全体 loss を末尾に出したい場合（任意）
+            if hasattr(self, '_last_all_loss'):
+                pbar.set_postfix_str(f"loss={self._last_all_loss:.3f}")
 
     def output_video(self):
         util.images_to_video(self.output_folder, self.config.fps)
