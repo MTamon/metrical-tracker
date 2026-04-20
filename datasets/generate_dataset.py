@@ -52,7 +52,9 @@ class GeneratorDataset(Dataset, ABC):
         bbox_path = self.config.actor + "/bbox.pt"
 
         if os.path.exists(bbox_path):
-            bbox = torch.load(bbox_path)
+            # weights_only=False: bbox is a plain numpy array / list, not a
+            # tensor. torch>=2.6 defaults weights_only=True which would fail.
+            bbox = torch.load(bbox_path, weights_only=False)
 
         for imagepath in tqdm(self.images):
             lmk_path = imagepath.replace('source', 'kpt').replace('png', 'npy').replace('jpg', 'npy')

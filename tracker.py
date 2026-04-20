@@ -152,7 +152,10 @@ class Tracker(object):
             exit(0)
 
         last_snap = snaps[idx]
-        payload = torch.load(last_snap)
+        # weights_only=False: payload contains nested dicts / numpy arrays, not
+        # just tensors. torch>=2.6 defaults weights_only to True which refuses
+        # to unpickle non-tensor objects.
+        payload = torch.load(last_snap, weights_only=False)
 
         camera_params = payload['camera']
         self.R = nn.Parameter(torch.from_numpy(camera_params['R']).to(self.device))

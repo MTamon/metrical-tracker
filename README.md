@@ -30,20 +30,45 @@ that stores all the information. Additionally, depth maps and meshes are also sa
 
 ### Installation
 
-After cloning the repository please install the environment by running the `install.sh` script. It will prepare the
-tracker for usage. Please note to obtain [BFM texture](https://faces.dmi.unibas.ch/bfm/bfm2017.html), **which was
-used in our results and projects**, you have to follow the [BFM_to_FLAME](https://github.com/TimoBolkart/BFM_to_FLAME)
-repository. By
+This fork targets **Python 3.11 / PyTorch 2.9.1 / CUDA 12.8** so it can coexist
+with [MTamon/smirk (release/cuda128)](https://github.com/MTamon/smirk/tree/release/cuda128),
+[MTamon/DECA (cuda128)](https://github.com/MTamon/DECA/tree/cuda128) and
+[MTamon/FlashAvatar (release/cuda128-fixed)](https://github.com/MTamon/FlashAvatar/tree/release/cuda128-fixed)
+in the same environment. `chumpy` is installed from GitHub main (numpy 2.x
+compatible), matching those projects.
+
+Preconditions:
+
+- Python 3.11 on PATH (`python3.11 --version`).
+- CUDA Toolkit 12.8 installed (nvcc on PATH or `CUDA_HOME` set).
+- `gcc-11` / `g++-11` for building `pytorch3d` from source.
+- A FLAME account (https://flame.is.tue.mpg.de/).
+
+To obtain [BFM texture](https://faces.dmi.unibas.ch/bfm/bfm2017.html), **which
+was used in our results and projects**, follow the
+[BFM_to_FLAME](https://github.com/TimoBolkart/BFM_to_FLAME) repository. By
 default, the FLAME texture will be downloaded and used in the output folder.
 
-Before installation, you need to create an account on the [FLAME website](https://flame.is.tue.mpg.de/) and prepare your
-login and password beforehand. You will be asked to provide them in the installation script.
+```shell
+git clone https://github.com/MTamon/metrical-tracker.git
+cd metrical-tracker
+./install.sh          # downloads FLAME assets, creates .venv, runs install_128.sh
+source .venv/bin/activate
+```
+
+If you already have the FLAME assets and just want the pinned Python
+environment, skip `install.sh` and run `install_128.sh` inside an active
+Python 3.11 venv directly:
 
 ```shell
-git clone https://github.com/Zielon/metrical-tracker.git
-cd metrical-tracker
-./install.sh
+python3.11 -m venv .venv
+source .venv/bin/activate
+./install_128.sh
 ```
+
+`requirements.txt` mirrors the `install_128.sh` pin set for reference.
+`pytorch3d` is built from source because no pre-built wheel ships for
+PyTorch 2.9.1 + CUDA 12.8.
 
 ### Usage
 
